@@ -2,8 +2,8 @@
 
 A minimal Uniswap‑style decentralized exchange (DEX) for swapping two ERC‑20 tokens on Ethereum (Sepolia / local Hardhat). Easy to deploy, easy to fork and powered by a delulu cat 🚀
 
-Live Demo: (https://delulu‑dex.vercel.app/)[https://delulu‑dex.vercel.app/]
-Repo: (github.com/visionEye0/Delulu‑Dex)[github.com/visionEye0/Delulu‑Dex]
+Live Demo: [https://delulu‑dex.vercel.app/](https://delulu‑dex.vercel.app/)
+Repo: [github.com/visionEye0/Delulu‑Dex](github.com/visionEye0/Delulu‑Dex)
 
 ---
 
