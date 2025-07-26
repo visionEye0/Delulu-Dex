@@ -19,221 +19,221 @@ function App() {
   const [dex, setDex] = useState(null);
   const [tokenA, setTokenA] = useState(null);
   const [tokenB, setTokenB] = useState(null);
-  const [resA, setResA] = useState("0");
-  const [resB, setResB] = useState("0");
+  const [resA, setResA] = useState("");
+  const [resB, setResB] = useState("");
   const [amtA, setAmtA] = useState("");
   const [amtB, setAmtB] = useState("");
 
-  // Swap states
   const [swapAmount, setSwapAmount] = useState("");
   const [swapOutput, setSwapOutput] = useState("");
-  const [swapDirection, setSwapDirection] = useState("AtoB"); // "AtoB" or "BtoA"
+  const [swapDirection, setSwapDirection] = useState("AtoB");
 
-  // Loading states
+  const [loadingData, setLoadingData] = useState(true);
   const [loadingAdd, setLoadingAdd] = useState(false);
   const [loadingSwap, setLoadingSwap] = useState(false);
   const [loadingRemove, setLoadingRemove] = useState(false);
 
   useEffect(() => {
     if (window.ethereum) {
-      const pr = new ethers.BrowserProvider(window.ethereum);
-      setProvider(pr);
+      setProvider(new ethers.BrowserProvider(window.ethereum));
     }
   }, []);
 
   useEffect(() => {
-    if (dex) {
-      refresh();
-    }
+    if (dex) refresh();
   }, [dex]);
 
   const connect = async () => {
-  if (!provider) return;
-  await provider.send("eth_requestAccounts", []);
-  const s = await provider.getSigner();
-  setSigner(s);
+    if (!provider) return;
+    setLoadingData(true);
+    await provider.send("eth_requestAccounts", []);
+    const s = await provider.getSigner();
+    setSigner(s);
 
-  const dexContract = new ethers.Contract(DEX_ADDR, LP_ABI.abi, s);
-  const tokenAContract = new ethers.Contract(TOKEN_A, TOKEN_ABI.abi, s);
-  const tokenBContract = new ethers.Contract(TOKEN_B, TOKEN_ABI.abi, s);
+    const dexC = new ethers.Contract(DEX_ADDR, LP_ABI.abi, s);
+    const aC = new ethers.Contract(TOKEN_A, TOKEN_ABI.abi, s);
+    const bC = new ethers.Contract(TOKEN_B, TOKEN_ABI.abi, s);
+    setDex(dexC);
+    setTokenA(aC);
+    setTokenB(bC);
 
-  setDex(dexContract);
-  setTokenA(tokenAContract);
-  setTokenB(tokenBContract);
+    // load token metadata
+    const [[nA, sA], [nB, sB]] = await Promise.all([
+      Promise.all([aC.name(), aC.symbol()]),
+      Promise.all([bC.name(), bC.symbol()]),
+    ]);
+    setNameA(nA);
+    setSymbolA(sA);
+    setNameB(nB);
+    setSymbolB(sB);
 
-  // Get names and symbols
-  const [nameA_, symbolA_] = await Promise.all([
-    tokenAContract.name(),
-    tokenAContract.symbol()
-  ]);
-  const [nameB_, symbolB_] = await Promise.all([
-    tokenBContract.name(),
-    tokenBContract.symbol()
-  ]);
-
-  setNameA(nameA_);
-  setSymbolA(symbolA_);
-  setNameB(nameB_);
-  setSymbolB(symbolB_);
-};
-
+    setLoadingData(false);
+  };
 
   const refresh = async () => {
     if (!dex) return;
-    const rA = await dex.reserveA();
-    const rB = await dex.reserveB();
-    setResA(ethers.formatEther(rA));
-    setResB(ethers.formatEther(rB));
+    setLoadingData(true);
+    const [rA, rB] = await Promise.all([dex.reserveA(), dex.reserveB()]);
+    setResA(parseFloat(ethers.formatEther(rA)).toFixed(2));
+    setResB(parseFloat(ethers.formatEther(rB)).toFixed(2));
+    setLoadingData(false);
   };
 
   const addLiquidity = async () => {
     if (!tokenA || !tokenB || !dex || !signer) return;
     setLoadingAdd(true);
     try {
-      const amountA = ethers.parseEther(amtA || "0");
-      const amountB = ethers.parseEther(amtB || "0");
-      await (await tokenA.approve(DEX_ADDR, amountA)).wait();
-      await (await tokenB.approve(DEX_ADDR, amountB)).wait();
-      await (await dex.addLiquidity(amountA, amountB)).wait();
+      const a = ethers.parseEther(amtA || "0");
+      const b = ethers.parseEther(amtB || "0");
+      await (await tokenA.approve(DEX_ADDR, a)).wait();
+      await (await tokenB.approve(DEX_ADDR, b)).wait();
+      await (await dex.addLiquidity(a, b)).wait();
       refresh();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoadingAdd(false);
+    } catch (e) {
+      console.error(e);
     }
+    setLoadingAdd(false);
   };
 
   const swapTokens = async () => {
-    if (!dex || !signer) return;
-    if (!swapAmount) return;
+    if (!dex || !signer || !swapAmount) return;
     setLoadingSwap(true);
     try {
-      const amountIn = ethers.parseEther(swapAmount || "0");
+      const amt = ethers.parseEther(swapAmount);
       if (swapDirection === "AtoB") {
-        // Approve token A to the DEX contract before swapping
-        await (await tokenA.approve(DEX_ADDR, amountIn)).wait();
-        await (await dex.swapAforB(amountIn)).wait();
+        await (await tokenA.approve(DEX_ADDR, amt)).wait();
+        await (await dex.swapAforB(amt)).wait();
       } else {
-        // Approve token B to the DEX contract before swapping
-        await (await tokenB.approve(DEX_ADDR, amountIn)).wait();
-        await (await dex.swapBforA(amountIn)).wait();
+        await (await tokenB.approve(DEX_ADDR, amt)).wait();
+        await (await dex.swapBforA(amt)).wait();
       }
-      // Refresh reserves and clear input/output fields
       refresh();
       setSwapAmount("");
       setSwapOutput("");
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoadingSwap(false);
+    } catch (e) {
+      console.error(e);
     }
+    setLoadingSwap(false);
   };
-  
 
   const removeLiquidity = async () => {
     if (!dex || !signer) return;
     setLoadingRemove(true);
     try {
-      const lpBal = await dex.balanceOf(await signer.getAddress());
-      await (await dex.removeLiquidity(lpBal)).wait();
+      const lp = await dex.balanceOf(await signer.getAddress());
+      await (await dex.removeLiquidity(lp)).wait();
       refresh();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoadingRemove(false);
+    } catch (e) {
+      console.error(e);
     }
+    setLoadingRemove(false);
   };
 
   const handleSwapAmountChange = (e) => {
-    const value = e.target.value;
-    setSwapAmount(value);
-    // Calculate output using constant product formula (naive)
-    const inAmt = parseFloat(value) || 0;
-    const inRes = swapDirection === "AtoB" ? parseFloat(resA) : parseFloat(resB);
-    const outRes = swapDirection === "AtoB" ? parseFloat(resB) : parseFloat(resA);
-    if (inRes > 0) {
-      const output = (inAmt * outRes) / (inRes + inAmt);
-      setSwapOutput(output.toString());
-    } else {
-      setSwapOutput("");
-    }
+    const v = e.target.value;
+    setSwapAmount(v);
+    const inAmt = parseFloat(v) || 0;
+    const inRes = swapDirection === "AtoB" ? +resA : +resB;
+    const outRes = swapDirection === "AtoB" ? +resB : +resA;
+    setSwapOutput(
+      inRes > 0 ? ((inAmt * outRes) / (inRes + inAmt)).toFixed(4) : ""
+    );
   };
 
   const toggleDirection = () => {
-    if (swapDirection === "AtoB") {
-      setSwapDirection("BtoA");
-      setSwapAmount(swapOutput);
-      setSwapOutput(swapAmount);
-    } else {
-      setSwapDirection("AtoB");
-      setSwapAmount(swapOutput);
-      setSwapOutput(swapAmount);
-    }
+    setSwapDirection((d) => (d === "AtoB" ? "BtoA" : "AtoB"));
+    setSwapAmount(swapOutput);
+    setSwapOutput(swapAmount);
   };
 
-  return (
-    <div className="container">
-      {!signer ? (
-        <button onClick={connect}>Connect Wallet</button>
-      ) : (
-        <>
-          <div className="reserve">
-            Reserves: {nameA} = {resA}, {nameB} = {resB}
-          </div>
+  const disabledAll =
+    loadingData || loadingAdd || loadingSwap || loadingRemove;
 
-
-          {/* Add Liquidity UI */}
-          <div>
-            <input
-              placeholder="Amount A"
-              value={amtA}
-              onChange={(e) => setAmtA(e.target.value)}
-            />
-            <input
-              placeholder="Amount B"
-              value={amtB}
-              onChange={(e) => setAmtB(e.target.value)}
-            />
-            <button onClick={addLiquidity} disabled={loadingAdd}>
-              {loadingAdd ? <span className="loader"></span> : "Approve + Add Liquidity"}
-            </button>
-          </div>
-
-          {/* Swap UI */}
-          <div className="swap-ui">
-            <div className="swap-row">
-              <input
-                placeholder="Amount"
-                value={swapAmount}
-                onChange={handleSwapAmountChange}
-              />
-              <span>{swapDirection === "AtoB" ? symbolA : symbolB}</span>
-            </div>
-            <div className="swap-arrow" onClick={toggleDirection}>
-              <span>⇅</span>
-            </div>
-            <div className="swap-row">
-              <input
-                placeholder="Output"
-                value={swapOutput}
-                disabled
-              />
-              <span>{swapDirection === "AtoB" ? symbolB : symbolA}</span>
-            </div>
-            <button onClick={swapTokens} disabled={loadingSwap}>
-              {loadingSwap ? <span className="loader"></span> : "Swap"}
-            </button>
-          </div>
-
-
-          {/* Remove Liquidity */}
-          <button onClick={removeLiquidity} disabled={loadingRemove}>
-            {loadingRemove ? <span className="loader"></span> : "Remove Liquidity"}
+    return (
+      <div className="container">
+        <img className="logo" width={300} src="/delulu_dex.png" alt="Delulu Dex Logo" />
+        {!signer ? (
+          <button onClick={connect}>
+            Connect Wallet
           </button>
-        </>
-      )}
-    </div>
-  );
+        ) : (
+          <>
+            <div className="reserve-box">
+              <div className="reserve-title">Reserves</div>
+              <div className="reserve-pair">
+                {loadingData ? (
+                  <span className="spinner" />
+                ) : (
+                  `${nameA} = ${resA}`
+                )}
+                ,&nbsp;
+                {loadingData ? (
+                  <span className="spinner" />
+                ) : (
+                  `${nameB} = ${resB}`
+                )}
+              </div>
+            </div>
+  
+            <div className="liquidity-ui">
+              <input
+                placeholder={loadingData ? "Loading..." : `Amount (${symbolA})`}
+                value={amtA}
+                onChange={(e) => setAmtA(e.target.value)}
+                disabled={disabledAll || loadingData}
+              />
+              <input
+                placeholder={loadingData ? "Loading..." : `Amount (${symbolB})`}
+                value={amtB}
+                onChange={(e) => setAmtB(e.target.value)}
+                disabled={disabledAll || loadingData}
+              />
+              <button onClick={addLiquidity} disabled={disabledAll}>
+                {loadingAdd ? <span className="spinner" /> : "Approve + Add Liquidity"}
+              </button>
+            </div>
+  
+            <div className="swap-ui">
+              <div className="swap-row">
+                <input
+                  placeholder="Amount"
+                  value={swapAmount}
+                  onChange={handleSwapAmountChange}
+                  disabled={disabledAll}
+                />
+                {loadingData ? (
+                  <span className="spinner" />
+                ) : (
+                  <span>{swapDirection === "AtoB" ? symbolA : symbolB}</span>
+                )}
+              </div>
+              <div className="swap-arrow" onClick={toggleDirection}>
+                ⇅
+              </div>
+              <div className="swap-row">
+                <input
+                  placeholder="Output"
+                  value={swapOutput}
+                  disabled
+                />
+                {loadingData ? (
+                  <span className="spinner" />
+                ) : (
+                  <span>{swapDirection === "AtoB" ? symbolB : symbolA}</span>
+                )}
+              </div>
+              <button onClick={swapTokens} disabled={disabledAll}>
+                {loadingSwap ? <span className="spinner" /> : "Swap"}
+              </button>
+            </div>
+  
+            <button onClick={removeLiquidity} disabled={disabledAll}>
+              {loadingRemove ? <span className="spinner" /> : "Remove Liquidity"}
+            </button>
+          </>
+        )}
+      </div>
+    );
 }
 
 export default App;
